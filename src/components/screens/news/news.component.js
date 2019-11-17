@@ -1,6 +1,6 @@
-import React, {useDispatch, useGlobal, addReducer, getGlobal} from 'reactn';
-import {memo, useEffect, useState, useRef} from 'react';
-import {View, Text, StatusBar, FlatList} from 'react-native';
+import React from 'reactn';
+import {memo, useRef} from 'react';
+import {View, Text, StatusBar} from 'react-native';
 import SafeAreaView from 'react-native-safe-area-view';
 
 import HeaderBar from '../../modules/header-bar';
@@ -17,7 +17,6 @@ const NewsScreen: () => React$Node = props => {
   const {navigation} = props;
 
   // state
-  const [data, setData] = useState([]);
 
   // lifecycle
 
@@ -26,8 +25,10 @@ const NewsScreen: () => React$Node = props => {
     try {
       ref.page = 1;
       const res = await api.products.getProducts(ref.page);
-      setData(res.data);
-    } catch (e) {}
+      return res.data;
+    } catch (e) {
+      return e;
+    }
   };
 
   const _addingProducts = async () => {
@@ -37,8 +38,10 @@ const NewsScreen: () => React$Node = props => {
       if (res.data.length === 0) {
         return 'ended';
       }
-      setData(oldData => [...oldData, ...res.data]);
-    } catch (e) {}
+      return res.data;
+    } catch (e) {
+      return e;
+    }
   };
 
   // render
@@ -62,7 +65,6 @@ const NewsScreen: () => React$Node = props => {
           <View style={styles.body}>
             <FetchList
               renderItem={_renderItem}
-              data={data}
               contentContainerStyle={styles.wrapList}
               ItemSeparatorComponent={() => <View style={styles.separator} />}
               onRefresh={_fetchProducts}

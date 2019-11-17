@@ -1,5 +1,12 @@
 import React, {memo, useRef, useEffect, useState, useCallback} from 'react';
-import {FlatList, View, RefreshControl, ActivityIndicator} from 'react-native';
+import {
+  FlatList,
+  View,
+  RefreshControl,
+  ActivityIndicator,
+  Text,
+} from 'react-native';
+import {View as ViewAnimate} from 'react-native-animatable';
 import PropTypes from 'prop-types';
 
 import LoadingIndicator from '../loading-indicator';
@@ -14,7 +21,7 @@ const FetchList: () => React$Node = (props, _ref) => {
     loadingIndicator: null,
   }).current;
   const {
-    data = [],
+    defaultData = [],
     renderItem = () => null,
     style = null,
     contentContainerStyle = null,
@@ -25,21 +32,61 @@ const FetchList: () => React$Node = (props, _ref) => {
   } = props;
 
   // State
+  const [data, setData] = useState(defaultData);
   const [refreshing, setRefreshing] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [initing, setIniting] = useState(false);
+  const [error, setError] = useState(false);
+
+  // Action
+  const _onInit = async () => {
+    await ref.loadingIndicator.show();
+    const res = await onInit();
+    if (Array.isArray(res)) {
+      setData(res);
+    } else {
+      setError(res);
+    }
+    await ref.loadingIndicator.dismiss();
+    await ref.ViewAnimate.fadeIn(300);
+  };
+
+  const _onEndReached = async () => {
+    console.log('endred');
+    if (ref.disableAdding || ref.adding || data.length === 0) {
+      return;
+    }
+    setAdding(true);
+    ref.adding = true;
+    const res = await onAdding();
+    if (res === 'ended') {
+      ref.disableAdding = true;
+    } else if (Array.isArray(res)) {
+      setData(prevData => [...prevData, ...res]);
+    }
+    setAdding(false);
+    ref.adding = false;
+    ref.listView.flashScrollIndicators();
+  };
+
+  const _onRefresh = async () => {
+    setRefreshing(true);
+    setError(false);
+    ref.disableAdding = false;
+    const res = await onRefresh();
+    if (Array.isArray(res)) {
+      setData(res);
+    } else {
+      setError(res);
+    }
+    setRefreshing(false);
+  };
 
   // Lifecycle
   useEffect(() => {
-    setIniting(true);
+    _onInit();
   }, []);
 
-  useEffect(() => {
-    if (initing) {
-      _onInit();
-    }
-  }, [_onInit, initing]);
-
+  // render
   const _renderFooter = () => {
     if (!adding) {
       return null;
@@ -57,54 +104,42 @@ const FetchList: () => React$Node = (props, _ref) => {
     );
   };
 
-  // Action
-  const _onInit = useCallback(async () => {
-    await ref.loadingIndicator.show();
-    await onInit();
-    await ref.loadingIndicator.dismiss();
-    setIniting(false);
-  }, [onInit, ref.loadingIndicator]);
-
-  const _onEndReached = async () => {
-    if (ref.disableAdding || ref.adding) {
-      return;
-    }
-    setAdding(true);
-    ref.adding = true;
-    const res = await onAdding();
-    if (res === 'ended') {
-      ref.disableAdding = true;
-    }
-    setAdding(false);
-    ref.adding = false;
-    ref.listView.flashScrollIndicators();
-  };
-
-  const _onRefresh = async () => {
-    setRefreshing(true);
-    ref.disableAdding = false;
-    await onRefresh();
-    setRefreshing(false);
+  const _renderEmptyError = () => {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}>
+        {!error ? <Text>Empty</Text> : <Text>Error</Text>}
+      </View>
+    );
   };
 
   return (
     <View style={{flex: 1}}>
-      <FlatList
-        data={data}
-        renderItem={renderItem}
-        contentContainerStyle={contentContainerStyle}
-        style={style}
-        keyExtractor={item => `${item.id}`}
-        ItemSeparatorComponent={ItemSeparatorComponent}
-        ListFooterComponent={_renderFooter}
-        onEndReached={_onEndReached}
-        onEndReachedThreshold={0.01}
-        refreshing={refreshing}
-        ref={node => (ref.listView = node)}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={_onRefresh} />
-        }
-      />
+      <ViewAnimate
+        ref={node => (ref.ViewAnimate = node)}
+        style={{flex: 1, opacity: 0}}>
+        <FlatList
+          data={data}
+          renderItem={renderItem}
+          style={style}
+          keyExtractor={item => `${item.id}`}
+          ItemSeparatorComponent={ItemSeparatorComponent}
+          ListFooterComponent={_renderFooter}
+          onEndReached={_onEndReached}
+          onEndReachedThreshold={0.01}
+          refreshing={refreshing}
+          ref={node => (ref.listView = node)}
+          contentContainerStyle={{flexGrow: 1, ...contentContainerStyle}}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={_onRefresh} />
+          }
+          ListEmptyComponent={_renderEmptyError}
+        />
+      </ViewAnimate>
       <LoadingIndicator ref={node => (ref.loadingIndicator = node)} />
     </View>
   );
@@ -118,7 +153,7 @@ FetchList.propTypes = {
   onRefresh: PropTypes.func,
   onInit: PropTypes.func,
   onAdding: PropTypes.func,
-  data: PropTypes.array.isRequired,
+  defaultData: PropTypes.array,
 };
 
 export default memo(FetchList);
